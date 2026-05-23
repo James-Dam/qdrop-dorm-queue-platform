@@ -3,7 +3,7 @@
 from flask import Blueprint
 
 # Create a Blueprint for routes relating to registration/login page
-home_bp = Blueprint('home', __name__)
+home_bp = Blueprint("home", __name__)
 
 # Importing routes so that they register with the blueprint
 from . import routes
