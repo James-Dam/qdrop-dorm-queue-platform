@@ -3,7 +3,7 @@
 from flask import Blueprint
 
 # Create a Blueprint for routes relating to showers
-laundry_bp = Blueprint('laundry', __name__)
+laundry_bp = Blueprint("laundry", __name__)
 
 # Importing routes so that they register with the blueprint
 from . import routes
