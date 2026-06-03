@@ -16,7 +16,7 @@ class QueueEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     phone_number = db.Column(db.String(20), nullable=False, index=True)
     event_type = db.Column(db.String(50), nullable=False)
-    registration_time = db.Column(db.DateTime, nullable=False, default=func.now())
+    registration_time = db.Column(db.DateTime(timezone=True), nullable=False, default=func.now())
     # Store as "HH:MM"
     duration = db.Column(db.Integer, nullable=False)
     position = db.Column(db.Integer, nullable=False)

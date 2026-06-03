@@ -1,8 +1,7 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
-from flask import current_app
 from sqlalchemy import func
 from twilio.rest import Client
 
@@ -13,13 +12,40 @@ from app_queue.models import QueueEntry
 load_dotenv()
 
 # .env variables
+ENABLE_SMS = os.environ.get("ENABLE_SMS", "true").strip().lower() in ("1", "true", "yes")
 ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER")
 PERSONAL_NUMBER = os.environ.get("PERSONAL_NUMBER")
 
-# create client
-client = Client(ACCOUNT_SID, AUTH_TOKEN)
+TWILIO_ENABLED = ENABLE_SMS and ACCOUNT_SID and AUTH_TOKEN and TWILIO_PHONE_NUMBER
+client = Client(ACCOUNT_SID, AUTH_TOKEN) if TWILIO_ENABLED else None
+
+
+def _log_sms_fallback(to_number, body, message_type="SMS", app=None):
+    log_message = (
+        f"SMS disabled or credentials unavailable. Would send {message_type} to {to_number}: {body}"
+    )
+    if app is not None:
+        app.logger.info(log_message)
+    else:
+        print(log_message)
+
+
+def _send_sms(body, to_number, app=None, message_type="SMS"):
+    if not TWILIO_ENABLED:
+        _log_sms_fallback(to_number, body, message_type, app=app)
+        return True
+    try:
+        client.messages.create(body=body, from_=TWILIO_PHONE_NUMBER, to=to_number)
+        return True
+    except Exception as e:
+        error_message = f"Error occurred sending {message_type} to {to_number}: {e}"
+        if app is not None:
+            app.logger.error(error_message)
+        else:
+            print(error_message)
+        return False
 
 
 def send_confirmation_message(phone_number, event, registration_time, duration):
@@ -36,20 +62,8 @@ def send_confirmation_message(phone_number, event, registration_time, duration):
         bool: indication of success or failure.
         message = "You have registered to {event} at {registration_time} with a duration of {duration} minutes!"
     """
-    try:
-        message = client.messages.create(
-            body=f"Hello! You have registered to {event} at {registration_time}!",
-            from_=TWILIO_PHONE_NUMBER,
-            to=phone_number,
-        )
-
-        print(
-            f"Successful sending registration message to {phone_number} with {event} at {registration_time} with duration {duration}!"
-        )
-        return True
-    except Exception as e:
-        print(f"Error occurred during confirmation message: {e}")
-        return False
+    body = f"Hello! You have registered to {event} at {registration_time}!"
+    return _send_sms(body, phone_number, message_type="registration confirmation")
 
 
 def send_reminder_message(app):
@@ -57,14 +71,14 @@ def send_reminder_message(app):
     Reminders user of upcoming appointment (sent in intervals).
     """
     print(
-        f"--- send_reminder_message job triggered at {datetime.utcnow()} ---"
+        f"--- send_reminder_message job triggered at {datetime.now(timezone.utc)} ---"
     )  # Debug print
 
     with app.app_context():
         REMINDER_30_MINUTES = 30
         # Cooldown for sending reminders
         REMINDER_THRESHOLD_MINUTES = 15
-        current_utc_time = datetime.utcnow()
+        current_utc_time = datetime.now(timezone.utc)
 
         # Define the window for upcoming appointments
         reminder_window_start = current_utc_time
@@ -107,23 +121,18 @@ def send_reminder_message(app):
                 minutes = time_difference.total_seconds() / 60
 
                 if 0 < minutes <= REMINDER_30_MINUTES:
-                    try:
-                        message = client.messages.create(
-                            body=f"Reminder: You have registered to {entry.event_type} at {entry.display_time}, {int(minutes)} minutes from now. Your current position is {entry.position}.",
-                            from_=TWILIO_PHONE_NUMBER,
-                            to=entry.phone_number,
-                        )
-                        # Update last_reminder_time after successful sending
+                    body = (
+                        f"Reminder: You have registered to {entry.event_type} at {entry.display_time}, "
+                        f"{int(minutes)} minutes from now. Your current position is {entry.position}."
+                    )
+                    if _send_sms(body, entry.phone_number, app=app, message_type="reminder"):
                         entry.last_reminder_time = current_utc_time
                         db.session.add(entry)
                         db.session.commit()
                         app.logger.info(
                             f"Successfully sent reminder message to {entry.phone_number} for {entry.event_type}. Updated last_reminder_time."
                         )
-                    except Exception as e:
-                        app.logger.error(
-                            f"Error occurred sending reminder message to {entry.phone_number}: {e}"
-                        )
+                    else:
                         db.session.rollback()
                 else:
                     app.logger.info(
@@ -144,11 +153,11 @@ def send_appointment_message(app):
     Notifies user about appointment currently happening.
     """
     print(
-        f"--- send_appointment_message job triggered at {datetime.utcnow()} ---"
+        f"--- send_appointment_message job triggered at {datetime.now(timezone.utc)} ---"
     )  # Debug print
 
     with app.app_context():
-        current_utc_time = datetime.utcnow()
+        current_utc_time = datetime.now(timezone.utc)
 
         # Define a small window for time around starting time (e.g., 30 seconds before and after)
         time_window_start = current_utc_time - timedelta(seconds=30)
@@ -172,10 +181,14 @@ def send_appointment_message(app):
 
             for appointment in appointments_to_process:
                 try:
-                    message = client.messages.create(
-                        body=f"The {appointment.event_type} you have registered for will be taking place right now! Have Fun!",
-                        from_=TWILIO_PHONE_NUMBER,
-                        to=appointment.phone_number,
+                    body = (
+                        f"The {appointment.event_type} you have registered for will be taking place right now! Have Fun!"
+                    )
+                    send_success = _send_sms(
+                        body,
+                        appointment.phone_number,
+                        app=app,
+                        message_type="appointment notification",
                     )
 
                     event_type_for_update = appointment.event_type
@@ -201,9 +214,14 @@ def send_appointment_message(app):
                     app.logger.info(
                         f"Positions for {event_type_for_update} after position {position_of_removed} decremented."
                     )
-                    app.logger.info(
-                        "Successful sending appointment message and queue update!"
-                    )
+                    if send_success:
+                        app.logger.info(
+                            "Successful sending appointment message and queue update!"
+                        )
+                    else:
+                        app.logger.warning(
+                            "Appointment processing completed without SMS delivery."
+                        )
 
                 except Exception as e:
                     app.logger.error(
@@ -223,11 +241,5 @@ def send_cancellation_message(phone_number, event, registration_time):
     """
     Notifies user about a cancellation of an event
     """
-    try:
-        message = client.messages.create(
-            body=f"You have cancelled the {event} taking place at {registration_time}!",
-            from_=TWILIO_PHONE_NUMBER,
-            to=phone_number,
-        )
-    except Exception as e:
-        print(f"Error occurred during send_cancellation_message: {e}")
+    body = f"You have cancelled the {event} taking place at {registration_time}!"
+    return _send_sms(body, phone_number, message_type="cancellation")

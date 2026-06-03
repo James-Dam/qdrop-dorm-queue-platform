@@ -16,6 +16,7 @@ from app.models import (
     SchoolSelectionForm,
     User,
 )
+from app.school_data import get_dorm_choices, get_school_choices
 from app_queue.models import QueueEntry
 from app_queue.services import (
     available_count,
@@ -91,6 +92,8 @@ def register():
 @login_required
 def select_school():
     form = SchoolSelectionForm()
+    form.school.choices = get_school_choices()
+    form.dorm.choices = get_dorm_choices(form.school.data or form.school.choices[0][0])
 
     # If submitted form is valid, add school to users db
     if form.validate_on_submit():
@@ -152,6 +155,7 @@ def settings():
     password_form = ChangePasswordForm()
     change_school_form = ChangeSchoolForm()
     change_dorm_form = ChangeDormForm()
+    change_dorm_form.dorm.choices = get_dorm_choices(current_user.school or get_school_choices()[0][0])
 
     # Check whether username or password has been changed
     if username_form.validate_on_submit() and "submit_username" in request.form:

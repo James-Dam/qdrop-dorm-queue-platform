@@ -70,6 +70,7 @@ APScheduler -> QueueEntry records -> Twilio SMS notifications
 - Twilio trial accounts may require verified recipient phone numbers.
 - The school/dorm dataset is sample data, not a complete U.S. college/dorm dataset.
 - Production deployment would require stronger validation, monitoring, and notification-provider setup.
+- Production school names could be imported from College Scorecard/IPEDS, but dorm names must be maintained per campus because no standardized national dorm API exists.
 
 ## Running locally
 
@@ -77,22 +78,39 @@ APScheduler -> QueueEntry records -> Twilio SMS notifications
    ```bash
    py -3 -m pip install -r requirements.txt
    ```
-2. Create a PostgreSQL database.
-3. Create a `.env` file with the required environment variables.
-4. Run Flask migrations with `flask db upgrade` or your preferred migration flow.
-5. Start the app:
+2. Run the app directly for a local demo:
    ```bash
    py -3 run.py
    ```
+
+The app works without a `.env` file or external services for a quick demo. It uses a local SQLite database at `qdrop.db` and logs SMS content instead of sending it.
+
+### Optional PostgreSQL / Twilio setup
+
+If you want the full production-like setup, create a `.env` file and set:
+- `SQLALCHEMY_DATABASE_URI`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_PHONE_NUMBER`
+
+Then run migrations before starting the app:
+```bash
+flask db upgrade
+```
 
 ## Environment variables
 
 - `SECRET_KEY`
 - `SQLALCHEMY_DATABASE_URI`
+- `ENABLE_SMS` (default: `true`)
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_PHONE_NUMBER`
 - `PERSONAL_NUMBER`
+
+If `ENABLE_SMS=false` or Twilio credentials are missing, the app logs what would have been sent instead of calling the Twilio API.
+
+If `SQLALCHEMY_DATABASE_URI` is not provided, the app uses a local SQLite database file `qdrop.db` for demo purposes.
 
 ## Future improvements
 
