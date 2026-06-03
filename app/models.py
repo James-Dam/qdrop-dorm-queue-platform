@@ -7,6 +7,7 @@ from wtforms import PasswordField, SelectField, StringField, SubmitField
 from wtforms.validators import InputRequired, Length, ValidationError
 
 from .extensions import db
+from .school_data import get_default_school, get_dorm_choices, get_school_choices
 
 
 # Define the User model
@@ -53,17 +54,15 @@ class LoginForm(FlaskForm):
 
 # Form for selecting a school
 class SchoolSelectionForm(FlaskForm):
-    school = SelectField(
-        "Select your school",
-        choices=[("University 1", "University 1")],
-        validators=[InputRequired()],
-    )
-    dorm = SelectField(
-        "Select your dorm",
-        choices=[("Dorm 1", "Dorm 1"), ("Dorm 2", "Dorm 2")],
-        validators=[InputRequired()],
-    )
+    school = SelectField("Select your school", choices=[], validators=[InputRequired()])
+    dorm = SelectField("Select your dorm", choices=[], validators=[InputRequired()])
     submit = SubmitField("Continue")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.school.choices = get_school_choices()
+        selected_school = self.school.data or get_default_school()
+        self.dorm.choices = get_dorm_choices(selected_school)
 
 
 # Form for changing password with validation
@@ -96,19 +95,15 @@ class ChangeUsernameForm(FlaskForm):
 
 # Form for changing school
 class ChangeSchoolForm(FlaskForm):
-    school = SelectField(
-        "Select your school",
-        choices=[("University 1", "University 1")],
-        validators=[InputRequired()],
-    )
+    school = SelectField("Select your school", choices=[], validators=[InputRequired()])
     submit = SubmitField("Change School", name="submit_school")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.school.choices = get_school_choices()
 
 
 # Form for changing dorm
 class ChangeDormForm(FlaskForm):
-    dorm = SelectField(
-        "Select your dorm",
-        choices=[("Dorm 1", "Dorm 1"), ("Dorm 2", "Dorm 2")],
-        validators=[InputRequired()],
-    )
+    dorm = SelectField("Select your dorm", choices=[], validators=[InputRequired()])
     submit = SubmitField("Change Dorm", name="submit_dorm")

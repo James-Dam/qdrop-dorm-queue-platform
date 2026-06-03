@@ -1,5 +1,6 @@
 # This file is for running the Flask application
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, session
@@ -13,10 +14,15 @@ from .models import User
 # Load environment variables from .env
 load_dotenv()
 
-
 # Get .env variables
-SECRET_KEY = os.environ.get("SECRET_KEY")
-SQLALCHEMY_DATABASE_URI = os.environ.get("SQLALCHEMY_DATABASE_URI")
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret")
+raw_db_uri = os.environ.get("SQLALCHEMY_DATABASE_URI", "").strip()
+if raw_db_uri:
+    SQLALCHEMY_DATABASE_URI = raw_db_uri
+else:
+    default_db_path = Path(__file__).resolve().parents[1] / "qdrop.db"
+    SQLALCHEMY_DATABASE_URI = f"sqlite:///{default_db_path}"
+ENABLE_SMS = os.environ.get("ENABLE_SMS", "true").strip().lower() in ("1", "true", "yes")
 
 
 def create_app():
@@ -28,13 +34,30 @@ def create_app():
     # App configurations
     app.config["SECRET_KEY"] = SECRET_KEY
     app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["ENABLE_SMS"] = ENABLE_SMS
     app.config["SCHEDULER_API_ENABLED"] = True
+
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "connect_args": {"check_same_thread": False}
+        }
+
+    app.logger.info(
+        f"Starting app with database: {app.config['SQLALCHEMY_DATABASE_URI']}"
+    )
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        app.logger.info("Using local SQLite demo database at qdrop.db")
 
     # Initialize entensions
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = "home.login"
     migrate.init_app(app, db)
+
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        with app.app_context():
+            db.create_all()
 
     # Initialize scheduler
     scheduler = APScheduler()

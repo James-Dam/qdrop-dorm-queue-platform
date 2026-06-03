@@ -3,11 +3,12 @@
 # upcoming bookings
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from flask_login import current_user
 from sqlalchemy import asc, func
 
-from app import db
+from app.extensions import db
 from app_queue.models import QueueEntry
 
 
@@ -15,7 +16,7 @@ def add_to_queue(
     phone_number: str,
     event: str,
     shower_id: int,
-    registration_time: str,
+    registration_time,
     duration: int,
     clicked_time,
     display_time,
@@ -24,11 +25,13 @@ def add_to_queue(
     Adds user to queue db with position and id
     """
 
-    # Convert registratoin time back into a from that the db would accept
-    today = datetime.now().strftime("%Y-%m-%d")
-    registration_time = datetime.strptime(
-        f"{today} {registration_time}", "%Y-%m-%d %H:%M:%S"
-    )
+    if isinstance(registration_time, str):
+        registration_time = datetime.fromisoformat(registration_time)
+
+    if registration_time.tzinfo is not None:
+        registration_time = registration_time.astimezone(ZoneInfo("UTC"))
+    else:
+        registration_time = registration_time.replace(tzinfo=ZoneInfo("UTC"))
 
     # Scan for highest position and increment
     max_position = (
