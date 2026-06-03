@@ -1,0 +1,12 @@
+{
+  "schools": [
+    {
+      "name": "University of California, Irvine",
+      "dorms": ["Middle Earth", "Mesa Court", "Palo Verde"]
+    },
+    {
+      "name": "University of Maryland",
+      "dorms": ["North Hill", "South Hill", "Cambridge Community"]
+    }
+  ]
+}
